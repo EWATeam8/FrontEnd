@@ -1,5 +1,10 @@
+import 'dart:math';
+
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:manufacturer/models/chat.model.dart';
+import 'package:manufacturer/views/orders_page.dart';
+import 'package:manufacturer/widgets/chat_bubble.widget.dart';
 
 class ChatPage extends StatefulWidget {
   static const routeID = '/chatPage';
@@ -11,12 +16,24 @@ class ChatPage extends StatefulWidget {
 
 class _ChatPageState extends State<ChatPage> {
   final TextEditingController _messageController = TextEditingController();
-  final List<String> _messages = [];
+  final List<Chat> _messages = [
+    Chat(message: "Hello", dateTime: DateTime.now(), fromBot: true),
+    Chat(message: "buye", dateTime: DateTime.now(), fromBot: false),
+    Chat(message: "Sayonara", dateTime: DateTime.now(), fromBot: true),
+    Chat(message: "Adios", dateTime: DateTime.now(), fromBot: true),
+  ];
 
   void _sendMessage() {
     if (_messageController.text.isNotEmpty) {
       setState(() {
-        _messages.add(_messageController.text);
+        int random = Random.secure().nextInt(2);
+        _messages.add(
+          Chat(
+            message: _messageController.text.trim(),
+            dateTime: DateTime.now(),
+            fromBot: random == 0,
+          ),
+        );
         _messageController.clear();
       });
     }
@@ -31,7 +48,9 @@ class _ChatPageState extends State<ChatPage> {
         elevation: 0,
         actions: [
           IconButton(
-            onPressed: () {},
+            onPressed: () {
+              Navigator.of(context).pushNamed(OrdersPage.routeID);
+            },
             icon: const Icon(CupertinoIcons.cube_box_fill),
           ),
         ],
@@ -64,11 +83,10 @@ class _ChatPageState extends State<ChatPage> {
               children: [
                 Expanded(
                   child: ListView.builder(
+                    padding: const EdgeInsets.symmetric(vertical: 15),
                     itemCount: _messages.length,
                     itemBuilder: (context, index) {
-                      return ListTile(
-                        title: Text(_messages[index]),
-                      );
+                      return ChatBubble(chat: _messages[index]);
                     },
                   ),
                 ),
