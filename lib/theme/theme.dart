@@ -1,13 +1,14 @@
 import 'package:flutter/material.dart';
 
 class AppTheme {
+  static Color get accentColor => Colors.lime;
   static ThemeData get lightTheme {
     return ThemeData(
       primarySwatch: Colors.blue,
       brightness: Brightness.light,
       scaffoldBackgroundColor: Colors.white,
       appBarTheme: const AppBarTheme(
-        color: Colors.blue,
+        color: Colors.white,
         elevation: 0,
         iconTheme: IconThemeData(color: Colors.white),
         titleTextStyle: TextStyle(
@@ -49,7 +50,7 @@ class AppTheme {
         ),
       ),
       iconTheme: const IconThemeData(
-        color: Colors.blue,
+        color: Colors.white,
         size: 24,
       ),
     );
