@@ -5,12 +5,12 @@ import 'package:manufacturer/models/product.model.dart';
 
 class ProductRecommendationService {
   final Dio _dio = Dio();
-  final String _baseUrl = 'https://localhost:5000';
+  final String _baseUrl = 'https://localhost:5008/api';
 
   Future<List<Product>> fetchRecommendedProducts({int limit = 10}) async {
     try {
       final response = await _dio
-          .get('$_baseUrl/recommendations', queryParameters: {'limit': limit});
+          .get('$_baseUrl/send_message', queryParameters: {'limit': limit});
       if (response.statusCode == 200) {
         List<dynamic> productsJson = json.decode(response.data);
         return productsJson.map((json) => Product.fromJson(json)).toList();

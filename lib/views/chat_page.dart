@@ -1,11 +1,15 @@
+import 'dart:convert';
+
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
+import 'package:lottie/lottie.dart';
+import 'package:manufacturer/constants/constants.dart';
 import 'package:manufacturer/logic/manufacturer.interface.dart';
 import 'package:manufacturer/models/chat.model.dart';
 import 'package:manufacturer/models/product.model.dart';
 import 'package:manufacturer/theme/theme.dart';
-import 'package:manufacturer/views/orders_page.dart';
+import "package:http/http.dart" as http;
+import 'package:manufacturer/widgets/recommendation_widgets.dart';
 
 class ChatPage extends StatefulWidget {
   static const routeID = '/chatPage';
@@ -17,16 +21,17 @@ class ChatPage extends StatefulWidget {
 
 class _ChatPageState extends State<ChatPage> {
   final TextEditingController _messageController = TextEditingController();
-  final List<Chat> _messages = [
-    Chat(message: "Hello", dateTime: DateTime.now(), fromBot: true),
-    Chat(message: "bye", dateTime: DateTime.now(), fromBot: false),
-    Chat(message: "Sayonara", dateTime: DateTime.now(), fromBot: true),
-    Chat(message: "Adios", dateTime: DateTime.now(), fromBot: true),
-  ];
+  final List<Chat> _messages = [];
   final FocusNode _focusNode = FocusNode();
   final ScrollController _scrollController = ScrollController();
+  String chatStatus = 'ended';
 
-  final DateFormat _dateFormat = DateFormat.Hm();
+  @override
+  void initState() {
+    super.initState();
+    _initializeChat();
+    _startPollingMessages();
+  }
 
   @override
   void dispose() {
@@ -36,22 +41,123 @@ class _ChatPageState extends State<ChatPage> {
     super.dispose();
   }
 
-  void _handleSubmitted(String text) {
+  void _initializeChat() async {
+    setState(() {
+      _messages.add(Chat(
+        message: "Hello! How can I help you today? Please choose an option:",
+        dateTime: DateTime.now(),
+        fromBot: true,
+        options: [
+          "Suggest some products",
+          "Show me the product catelog",
+          "Tell me about your return policy"
+        ],
+      ));
+    });
+    String apiEndpoint;
+    Map<String, dynamic> requestBody;
+
+    apiEndpoint = 'http://localhost:5008/api/start_chat';
+    requestBody = {
+      ...initialChatRequest,
+      'message': "hello",
+    };
+
+    try {
+      final response = await http.post(
+        Uri.parse(apiEndpoint),
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode(requestBody),
+      );
+
+      if (response.statusCode != 200) {
+        throw Exception('Failed to send request');
+      }
+    } catch (e) {
+      print('Error sending request: $e');
+    }
+  }
+
+  void _startPollingMessages() {
+    const duration = Duration(seconds: 1);
+    Future.doWhile(() async {
+      await Future.delayed(duration);
+      await _fetchMessages().then((_) {
+        Future.delayed(const Duration(milliseconds: 10), () {
+          _scrollController.animateTo(
+            _scrollController.position.maxScrollExtent,
+            duration: const Duration(milliseconds: 100),
+            curve: Curves.easeOut,
+          );
+        });
+      });
+
+      return true; // Continue polling
+    });
+  }
+
+  Future<void> _fetchMessages() async {
+    try {
+      final response =
+          await http.get(Uri.parse('http://localhost:5008/api/get_message'));
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        print(data);
+        if (data['message'] != null) {
+          if (data['message']['user'] != 'User_Proxy') {
+            setState(() {
+              _messages.add(Chat(
+                message: data['message']['message'],
+                dateTime: DateTime.now(),
+                fromBot: data['message']['user'] != 'User_Proxy',
+              ));
+            });
+          }
+        }
+        setState(() {
+          chatStatus = data['chat_status'];
+        });
+      }
+    } catch (e) {
+      print('Error fetching messages: $e');
+    }
+  }
+
+  Future<void> _handleSubmitted(String text) async {
     _messageController.clear();
     setState(() {
       _messages
           .add(Chat(message: text, dateTime: DateTime.now(), fromBot: false));
-      if (text.toLowerCase().contains('recommend')) {
-        _addRecommendations();
-      } else {
-        _messages.add(Chat(
-          message:
-              "I'm sorry, I don't understand. Try asking for recommendations.",
-          dateTime: DateTime.now(),
-          fromBot: true,
-        ));
-      }
     });
+
+    String apiEndpoint;
+    Map<String, dynamic> requestBody;
+
+    if (chatStatus == 'Chat ongoing' || chatStatus == 'inputting') {
+      apiEndpoint = 'http://localhost:5008/api/send_message';
+      requestBody = {'message': text};
+    } else {
+      apiEndpoint = 'http://localhost:5008/api/start_chat';
+      requestBody = {
+        ...initialChatRequest,
+        'message': text,
+      };
+    }
+
+    try {
+      final response = await http.post(
+        Uri.parse(apiEndpoint),
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode(requestBody),
+      );
+
+      if (response.statusCode != 200) {
+        throw Exception('Failed to send request');
+      }
+    } catch (e) {
+      print('Error sending request: $e');
+    }
+
     _focusNode.requestFocus();
     Future.delayed(const Duration(milliseconds: 10), () {
       _scrollController.animateTo(
@@ -63,192 +169,30 @@ class _ChatPageState extends State<ChatPage> {
   }
 
   void _addRecommendations() {
-    List<Product> recommendations = ManufacturerService.products.sublist(0, 1);
-    for (var product in recommendations) {
-      _messages.add(Chat(
-        message: '',
-        dateTime: DateTime.now(),
-        fromBot: true,
-        product: product,
-      ));
-    }
+    List<Product> recommendations = ManufacturerService.products.sublist(0, 2);
+    _messages.add(Chat(
+      message: "Here are some suggestions for you:",
+      dateTime: DateTime.now(),
+      fromBot: true,
+      products: recommendations,
+    ));
   }
 
   Widget _buildMessage(Chat chat) {
-    if (chat.product != null) {
-      return _buildProductRecommendation(chat);
+    if (chat.products != null) {
+      return buildProductRecommendations(chat);
     } else if (!chat.fromBot) {
-      return _buildUserMessage(chat);
+      return buildUserMessage(chat);
     } else {
-      return _buildBotMessage(chat);
+      return buildBotMessage(chat, _handleSubmitted);
     }
-  }
-
-  Widget _buildUserMessage(Chat chat) {
-    return Container(
-      margin: const EdgeInsets.symmetric(vertical: 10.0),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.end,
-        children: [
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Container(
-                margin: const EdgeInsets.symmetric(vertical: 2, horizontal: 5),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 20,
-                  vertical: 12,
-                ),
-                decoration: const BoxDecoration(
-                  color: Color.fromARGB(255, 131, 97, 255),
-                  borderRadius: BorderRadius.only(
-                    topLeft: Radius.circular(20),
-                    bottomLeft: Radius.circular(20),
-                    bottomRight: Radius.circular(20),
-                  ),
-                ),
-                child: Text(
-                  chat.message,
-                  style: const TextStyle(
-                    color: Colors.white,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 5),
-              Container(
-                margin: const EdgeInsets.symmetric(horizontal: 10),
-                child: Text(
-                  _dateFormat.format(chat.dateTime),
-                  style: const TextStyle(
-                    fontSize: 10,
-                    color: Colors.white38,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildBotMessage(Chat chat) {
-    return Container(
-      margin: const EdgeInsets.symmetric(vertical: 10.0),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.start,
-        children: [
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                margin: const EdgeInsets.symmetric(vertical: 2, horizontal: 5),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 20,
-                  vertical: 12,
-                ),
-                decoration: const BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.only(
-                    topRight: Radius.circular(20),
-                    bottomLeft: Radius.circular(20),
-                    bottomRight: Radius.circular(20),
-                  ),
-                ),
-                child: Text(
-                  chat.message,
-                  style: const TextStyle(
-                    color: Colors.black,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 5),
-              Container(
-                margin: const EdgeInsets.symmetric(horizontal: 10),
-                child: Text(
-                  _dateFormat.format(chat.dateTime),
-                  style: const TextStyle(
-                    fontSize: 10,
-                    color: Colors.white38,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildProductRecommendation(Chat chat) {
-    return Container(
-      margin: const EdgeInsets.symmetric(vertical: 10.0),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.start,
-        children: [
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                width: 250,
-                decoration: const BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.only(
-                    topRight: Radius.circular(20),
-                    bottomLeft: Radius.circular(20),
-                    bottomRight: Radius.circular(20),
-                  ),
-                ),
-                padding: const EdgeInsets.all(10.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Image.network(chat.product!.imageUrl,
-                        height: 100, width: 100, fit: BoxFit.cover),
-                    const SizedBox(height: 10),
-                    Text(
-                      chat.product!.name,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        color: Colors.black,
-                      ),
-                    ),
-                    const SizedBox(height: 5),
-                    Text(
-                      chat.product!.description,
-                      style: const TextStyle(
-                        color: Colors.black,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 5),
-              Container(
-                margin: const EdgeInsets.symmetric(horizontal: 10),
-                child: Text(
-                  _dateFormat.format(chat.dateTime),
-                  style: const TextStyle(
-                    fontSize: 10,
-                    color: Colors.white38,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        centerTitle: false,
+        centerTitle: true,
         title: const Text('Talk to your bot'),
         backgroundColor: Colors.white12,
         shadowColor: Colors.transparent,
@@ -273,28 +217,15 @@ class _ChatPageState extends State<ChatPage> {
                 const SizedBox(
                   height: 5,
                 ),
-                IconButton(
-                  onPressed: () {
-                    Navigator.of(context).pushNamed(OrdersPage.routeID);
-                  },
-                  color: Colors.white,
-                  iconSize: 32,
-                  icon: const Icon(CupertinoIcons.cube_box_fill),
-                ),
-                const SizedBox(
-                  height: 5,
-                ),
-                IconButton(
-                  onPressed: () {
-                    Navigator.of(context).pushNamed(OrdersPage.routeID);
-                  },
-                  color: Colors.white,
-                  iconSize: 32,
-                  icon: const Icon(CupertinoIcons.cart_fill),
-                ),
-                const SizedBox(
-                  height: 5,
-                ),
+                // IconButton(
+                //   onPressed: () {},
+                //   color: Colors.white,
+                //   iconSize: 32,
+                //   icon: const Icon(CupertinoIcons.cube_box_fill),
+                // ),
+                // const SizedBox(
+                //   height: 5,
+                // ),
                 IconButton(
                   onPressed: () {},
                   color: Colors.white,
@@ -310,13 +241,23 @@ class _ChatPageState extends State<ChatPage> {
                 Flexible(
                   child: ListView.builder(
                     controller: _scrollController,
-                    padding: const EdgeInsets.all(8.0),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 18.0, vertical: 8),
                     reverse: false,
                     itemBuilder: (_, int index) =>
                         _buildMessage(_messages[index]),
                     itemCount: _messages.length,
                   ),
                 ),
+                !_messages.last.fromBot
+                    ? ColorFiltered(
+                        colorFilter: const ColorFilter.mode(
+                          Color.fromARGB(255, 131, 97, 255),
+                          BlendMode.srcIn,
+                        ),
+                        child: Lottie.asset("assets/animations/loading.json"),
+                      )
+                    : const SizedBox(),
                 const Divider(height: 1.0),
                 Container(
                   decoration: BoxDecoration(color: Theme.of(context).cardColor),
@@ -366,91 +307,3 @@ class _ChatPageState extends State<ChatPage> {
     );
   }
 }
-
-  // @override
-  // Widget build(BuildContext context) {
-  //   return Scaffold(
-  //     appBar: AppBar(
-  //       centerTitle: false,
-  //       title: const Text('Talk to your bot'),
-  //       elevation: 0,
-  //       actions: [
-  //         IconButton(
-  //           onPressed: () {
-  //             Navigator.of(context).pushNamed(OrdersPage.routeID);
-  //           },
-  //           icon: const Icon(CupertinoIcons.cube_box_fill),
-  //         ),
-  //       ],
-  //     ),
-  //     body: Row(
-  //       children: [
-  //         Container(
-  //           color: Colors.red,
-  //           padding: const EdgeInsets.symmetric(
-  //             horizontal: 12,
-  //             vertical: 16,
-  //           ),
-  //           child: Column(
-  //             children: [
-  //               IconButton(
-  //                 onPressed: () {},
-  //                 iconSize: 30,
-  //                 icon: const Icon(CupertinoIcons.chat_bubble_2_fill),
-  //               ),
-  //               IconButton(
-  //                 onPressed: () {},
-  //                 iconSize: 30,
-  //                 icon: const Icon(CupertinoIcons.question_circle_fill),
-  //               ),
-  //             ],
-  //           ),
-  //         ),
-  //         Expanded(
-  //           child: Column(
-  //             children: [
-  //               Expanded(
-  //                 child: ListView.builder(
-  //                   padding: const EdgeInsets.symmetric(vertical: 15),
-  //                   itemCount: _messages.length,
-  //                   itemBuilder: (context, index) {
-  //                     return ChatBubble(chat: _messages[index]);
-  //                   },
-  //                 ),
-  //               ),
-  //               Row(
-  //                 children: [
-  //                   Expanded(
-  //                     child: TextField(
-  //                       controller: _messageController,
-  //                       decoration: const InputDecoration(
-  //                         contentPadding: EdgeInsets.symmetric(
-  //                           horizontal: 16,
-  //                           vertical: 25,
-  //                         ),
-  //                         hintText: 'Type a message',
-  //                         border: InputBorder.none,
-  //                         enabledBorder: InputBorder.none,
-  //                         focusedBorder: InputBorder.none,
-  //                         fillColor: Colors.red,
-  //                       ),
-  //                     ),
-  //                   ),
-  //                   Container(
-  //                     height: 66,
-  //                     color: Colors.red,
-  //                     child: IconButton(
-  //                       icon: const Icon(Icons.send),
-  //                       onPressed: _sendMessage,
-  //                     ),
-  //                   ),
-  //                 ],
-  //               ),
-  //             ],
-  //           ),
-  //         ),
-  //       ],
-  //     ),
-  //   );
-  // }
-// }
