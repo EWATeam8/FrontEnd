@@ -6,7 +6,6 @@ abstract class ManufacturerServiceInterface {
   Future<List<Product>> fetchRecommendedProducts({int limit = 10});
   Future<Product> fetchProductDetails(String productId);
   Future<List<Product>> searchProducts(String query);
-  Future<List<Product>> fetchProductsByCategory(String category);
 }
 
 class ManufacturerService implements ManufacturerServiceInterface {
@@ -28,8 +27,4 @@ class ManufacturerService implements ManufacturerServiceInterface {
   @override
   Future<List<Product>> searchProducts(String query) =>
       _productService.searchProducts(query);
-
-  @override
-  Future<List<Product>> fetchProductsByCategory(String category) =>
-      _productService.fetchProductsByCategory(category);
 }

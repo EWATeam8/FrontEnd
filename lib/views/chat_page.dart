@@ -4,9 +4,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:lottie/lottie.dart';
 import 'package:manufacturer/constants/constants.dart';
-import 'package:manufacturer/logic/manufacturer.interface.dart';
 import 'package:manufacturer/models/chat.model.dart';
-import 'package:manufacturer/models/product.model.dart';
 import 'package:manufacturer/theme/theme.dart';
 import "package:http/http.dart" as http;
 import 'package:manufacturer/widgets/recommendation_widgets.dart';
@@ -168,16 +166,6 @@ class _ChatPageState extends State<ChatPage> {
     });
   }
 
-  void _addRecommendations() {
-    List<Product> recommendations = ManufacturerService.products.sublist(0, 2);
-    _messages.add(Chat(
-      message: "Here are some suggestions for you:",
-      dateTime: DateTime.now(),
-      fromBot: true,
-      products: recommendations,
-    ));
-  }
-
   Widget _buildMessage(Chat chat) {
     if (chat.products != null) {
       return buildProductRecommendations(chat);
@@ -193,7 +181,7 @@ class _ChatPageState extends State<ChatPage> {
     return Scaffold(
       appBar: AppBar(
         centerTitle: true,
-        title: const Text('Talk to your bot'),
+        title: const Text('AutoParts Bot'),
         backgroundColor: Colors.white12,
         shadowColor: Colors.transparent,
         elevation: 0,

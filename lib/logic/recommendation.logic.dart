@@ -50,21 +50,6 @@ class ProductRecommendationService {
     }
   }
 
-  Future<List<Product>> fetchProductsByCategory(String category) async {
-    try {
-      final response = await _dio
-          .get('$_baseUrl/products', queryParameters: {'category': category});
-      if (response.statusCode == 200) {
-        List<dynamic> productsJson = json.decode(response.data);
-        return productsJson.map((json) => Product.fromJson(json)).toList();
-      } else {
-        throw Exception('Failed to load products by category');
-      }
-    } catch (e) {
-      throw _handleError(e);
-    }
-  }
-
   Exception _handleError(dynamic e) {
     if (e is DioException) {
       if (e.type == DioExceptionType.connectionTimeout ||

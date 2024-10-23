@@ -12,7 +12,7 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Manufacturer App',
+      title: 'AutoParts App',
       debugShowCheckedModeBanner: false,
       debugShowMaterialGrid: false,
       theme: AppTheme.lightTheme,
