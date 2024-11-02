@@ -49,9 +49,9 @@ class _ChatPageState extends State<ChatPage> {
         dateTime: DateTime.now(),
         fromBot: true,
         options: [
-          "Suggest some products",
           "Show me the product catelog",
-          "Tell me about your return policy"
+          "I want to know my order status",
+          "I want to report fraud activity"
         ],
       ));
     });
@@ -179,7 +179,7 @@ class _ChatPageState extends State<ChatPage> {
         // Add image message to chat
         setState(() {
           _messages.add(Chat(
-            message: "",
+            message: _messageController.text.trim(),
             dateTime: DateTime.now(),
             fromBot: false,
             imageFile: image,
@@ -202,9 +202,13 @@ class _ChatPageState extends State<ChatPage> {
         final response = await http.post(
           Uri.parse('http://localhost:8080/api/send_message'),
           headers: {'Content-Type': 'application/json'},
-          body: json.encode(
-              {'message': 'Image analysis request', 'image': base64Image}),
+          body: json.encode({
+            'message': _messageController.text.trim(),
+            'image': base64Image
+          }),
         );
+
+        _messageController.clear();
 
         if (response.statusCode != 200) {
           throw Exception('Failed to upload image');
@@ -256,7 +260,12 @@ class _ChatPageState extends State<ChatPage> {
               if (chat.message.isNotEmpty)
                 Padding(
                   padding: const EdgeInsets.only(top: 8.0),
-                  child: Text(chat.message),
+                  child: Text(
+                    chat.message,
+                    style: const TextStyle(
+                      color: Colors.black,
+                    ),
+                  ),
                 ),
             ],
           ),
