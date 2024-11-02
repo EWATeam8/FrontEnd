@@ -1,7 +1,10 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:lottie/lottie.dart';
 import 'package:manufacturer/constants/constants.dart';
 import 'package:manufacturer/models/chat.model.dart';
@@ -55,7 +58,7 @@ class _ChatPageState extends State<ChatPage> {
     String apiEndpoint;
     Map<String, dynamic> requestBody;
 
-    apiEndpoint = 'http://localhost:5008/api/start_chat';
+    apiEndpoint = 'http://localhost:8080/api/start_chat';
     requestBody = {
       ...initialChatRequest,
       'message': "hello",
@@ -97,7 +100,7 @@ class _ChatPageState extends State<ChatPage> {
   Future<void> _fetchMessages() async {
     try {
       final response =
-          await http.get(Uri.parse('http://localhost:5008/api/get_message'));
+          await http.get(Uri.parse('http://localhost:8080/api/get_message'));
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         print(data);
@@ -132,10 +135,10 @@ class _ChatPageState extends State<ChatPage> {
     Map<String, dynamic> requestBody;
 
     if (chatStatus == 'Chat ongoing' || chatStatus == 'inputting') {
-      apiEndpoint = 'http://localhost:5008/api/send_message';
+      apiEndpoint = 'http://localhost:8080/api/send_message';
       requestBody = {'message': text};
     } else {
-      apiEndpoint = 'http://localhost:5008/api/start_chat';
+      apiEndpoint = 'http://localhost:8080/api/start_chat';
       requestBody = {
         ...initialChatRequest,
         'message': text,
@@ -166,8 +169,100 @@ class _ChatPageState extends State<ChatPage> {
     });
   }
 
+  Future<void> _handleImageUpload() async {
+    final ImagePicker picker = ImagePicker();
+
+    try {
+      final XFile? image = await picker.pickImage(source: ImageSource.gallery);
+
+      if (image != null) {
+        // Add image message to chat
+        setState(() {
+          _messages.add(Chat(
+            message: "",
+            dateTime: DateTime.now(),
+            fromBot: false,
+            imageFile: image,
+          ));
+        });
+
+        // For web, we need to handle the image differently
+        String? base64Image;
+        if (kIsWeb) {
+          // Read as bytes and convert to base64
+          final bytes = await image.readAsBytes();
+          base64Image = base64Encode(bytes);
+        } else {
+          // For mobile, read file and convert to base64
+          final bytes = await File(image.path).readAsBytes();
+          base64Image = base64Encode(bytes);
+        }
+
+        // Send to backend
+        final response = await http.post(
+          Uri.parse('http://localhost:8080/api/send_message'),
+          headers: {'Content-Type': 'application/json'},
+          body: json.encode(
+              {'message': 'Image analysis request', 'image': base64Image}),
+        );
+
+        if (response.statusCode != 200) {
+          throw Exception('Failed to upload image');
+        }
+      }
+    } catch (e) {
+      setState(() {
+        _messages.add(Chat(
+          message: "Failed to upload image: $e",
+          dateTime: DateTime.now(),
+          fromBot: false,
+        ));
+      });
+    }
+  }
+
   Widget _buildMessage(Chat chat) {
-    if (chat.products != null) {
+    if (chat.imageFile != null) {
+      return Align(
+        alignment: Alignment.centerRight,
+        child: Container(
+          margin: const EdgeInsets.symmetric(vertical: 8.0),
+          padding: const EdgeInsets.all(8.0),
+          decoration: BoxDecoration(
+            color: Colors.blue[100],
+            borderRadius: BorderRadius.circular(12.0),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(8.0),
+                child: kIsWeb
+                    ? Image.network(
+                        // Use Image.network for web
+                        chat.imageFile!.path,
+                        width: 200,
+                        height: 200,
+                        fit: BoxFit.cover,
+                      )
+                    : Image.file(
+                        // Use Image.file for mobile
+                        File(chat.imageFile!.path),
+                        width: 200,
+                        height: 200,
+                        fit: BoxFit.cover,
+                      ),
+              ),
+              if (chat.message.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8.0),
+                  child: Text(chat.message),
+                ),
+            ],
+          ),
+        ),
+      );
+    } else if (chat.products != null) {
       return buildProductRecommendations(chat);
     } else if (!chat.fromBot) {
       return buildUserMessage(chat);
@@ -288,6 +383,15 @@ class _ChatPageState extends State<ChatPage> {
               icon: const Icon(CupertinoIcons.paperplane_fill),
               iconSize: 32,
               onPressed: () => _handleSubmitted(_messageController.text),
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 5),
+            color: Colors.white12,
+            child: IconButton(
+              icon: const Icon(CupertinoIcons.upload_circle),
+              iconSize: 32,
+              onPressed: () => _handleImageUpload(),
             ),
           ),
         ],

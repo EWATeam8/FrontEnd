@@ -5,7 +5,7 @@ import 'package:manufacturer/models/product.model.dart';
 
 class ProductRecommendationService {
   final Dio _dio = Dio();
-  final String _baseUrl = 'https://localhost:5008/api';
+  final String _baseUrl = 'https://localhost:8080/api';
 
   Future<List<Product>> fetchRecommendedProducts({int limit = 10}) async {
     try {
